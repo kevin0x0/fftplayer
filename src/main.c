@@ -19,7 +19,7 @@
 #define WINDOW_HEIGHT 640
 #define WINDOW_TITLE  "opengl learning"
 
-#define FFT_LOGSIZE   8
+#define FFT_LOGSIZE   12
 #define FFT_SIZE      ((size_t)1 << FFT_LOGSIZE)
 #define FFT_NFREQ     (FFT_SIZE / 2 + 1)
 
@@ -67,6 +67,11 @@ static void render(struct context *context, size_t currpos);
 static void play_audio(struct context *context);
 
 int main(int argc, char **argv) {
+  if (argc <= 1) {
+    fprintf(stderr, "you must provide mp3 file path\n");
+    return EXIT_FAILURE;
+  }
+
   glfwInit();
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -82,9 +87,8 @@ int main(int argc, char **argv) {
 
   GL_CALL(gladLoadGL());
 
-  const char *music = argc > 1 ? argv[1] : "resources/melt.mp3";
   struct context context;
-  context_init(&context, music, "resources/vs.glsl", "resources/fs.glsl");
+  context_init(&context, argv[1], "resources/vs.glsl", "resources/fs.glsl");
 
   glClearColor(0.0, 0.0, 0.0, 1.0);
   play_audio(&context);
