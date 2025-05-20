@@ -1,35 +1,23 @@
 #!/bin/bash
 
 function gen_deps() {
-  local incdir="$1"
-  local dir="$2"
-  local unique_id="$3"
-  local outputfile="$4"
-  local objsfile="$5"
-  local command="$6"
-  for file in $dir*; do
-    if [ -f $file ]; then
-      local list=$(gcc -MM $file $incdir | tr ': \\' '\n')
-      local target='$(OBJ_DIR)/l'${unique_id}_$(echo $list | tr ' ' '\n' | awk '/\.o/{print $1}')
-      unique_id=$(expr $unique_id + 1)
-      local source='$(SRC_DIR)/'$(echo $list | tr ' ' '\n' | awk '/\.c/{sub(/src\//, ""); print $1}')
-      local headers=
-      for header in $(echo $list | tr ': \\' '\n' | awk '/^include\/.*\.h/{sub(/include\//, "$(INC_DIR)/"); print $1}'); do
-        headers="$headers "$header
-      done
-      echo $target ':' $source $headers '|' create_dir >> $outputfile
-      echo -e "\t$command\n" >> $outputfile
-      echo $target \\ >> $objsfile
-    else
-      gen_deps "$incdir" $file/ "$unique_id" $outputfile $objsfile "$command"
-      unique_id=$?
-    fi
+  local inc_prefix="$1"
+  local src_prefix="$2"
+  local outputfile="$3"
+  local objsfile="$4"
+  local command="$5"
+  for file in $(find $src_prefix -type f); do
+    local file_noprefix=$(echo $file | sed -E 's@^'"$src_prefix"'@@')
+    local objfile='$(OBJ_DIR)/'$(echo $file_noprefix | sed -E 's/\.c$/.o/; s@/@-@g')
+    local headers=$(gcc -MM "$file" -I$inc_prefix | sed -E -e 's/^.*:.*\.c\>//; s/\\//g' -e 's@'" $inc_prefix"'@ $(INC_DIR)/@g')
+    echo $objfile ':' '$(SRC_DIR)/'$file_noprefix $headers '|' create_dir >> $outputfile
+    echo -e "\t$command\n" >> $outputfile
+    echo $objfile \\ >> $objsfile
   done
-  return $unique_id
 }
 
 echo "" > deps.mk
 echo "OBJECTS = \\" > objects.mk
 
-gen_deps '-I ./include' ./src/ 0 deps.mk objects.mk '$(CC) $(CFLAGS) -c -o $@ $<'
+gen_deps include/ src/ deps.mk objects.mk '$(CC) $(CFLAGS) -c -o $@ $<'
 exit 0

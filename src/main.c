@@ -1,12 +1,18 @@
+#ifdef WIN32
 #include "GLFW/glfw3.h"
+#else
+#include <GLFW/glfw3.h>
+#endif
+
 #include "glad/glad.h"
 #include "minimp3/minimp3.h"
 #include "minimp3/minimp3_ex.h"
 #include "audio.h"
 #include "fft.h"
 
-#include <stdbool.h>
+#include <limits.h>
 #include <pthread.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +71,7 @@ static void prepare_data(struct context *context, const char *music);
 static void prepare_program(struct context *context, const char *vspath, const char *fspath);
 static void render(struct context *context, size_t currpos);
 static void play_audio(struct context *context);
+static void window_resize_callback(GLFWwindow* window, int width, int height);
 
 int main(int argc, char **argv) {
   if (argc <= 1) {
@@ -84,6 +91,7 @@ int main(int argc, char **argv) {
   }
 
   glfwMakeContextCurrent(window);
+  glfwSetWindowSizeCallback(window, window_resize_callback);
 
   GL_CALL(gladLoadGL());
 
@@ -99,6 +107,7 @@ int main(int argc, char **argv) {
     render(&context, audiopos);
     glfwSwapBuffers(window);
     glfwPollEvents();
+    audio_continue(&context.audio);
     audiopos = audio_getpos(&context.audio);
   }
 
@@ -304,10 +313,15 @@ static void play_audio(struct context *context) {
   context->audio = (struct audio_desc) {
     .nchannel = context->mp3fileinfo.channels,
     .samples = context->mp3fileinfo.samples,
-    .hz = context->mp3fileinfo.hz,
+    .rate = context->mp3fileinfo.hz,
     .data = context->mp3fileinfo.buffer,
     .avg_bitrate_kbps = context->mp3fileinfo.avg_bitrate_kbps,
   };
 
   audio_play(&context->audio);
+}
+
+static void window_resize_callback(GLFWwindow* window, int width, int height) {
+  (void)window;
+  glViewport(0, 0, width, height);
 }
