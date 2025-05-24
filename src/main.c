@@ -203,12 +203,70 @@ static void context_deinit(struct context *context) {
   free(context->blocks);
 }
 
+static void proccess_data(mp3d_sample_t *data, size_t nframe, size_t nchannel, size_t rate) {
+  size_t logsize = 0;
+  while (((size_t)1 << logsize) <= nframe)
+    ++logsize;
+  logsize -= 1;
+  size_t process_size = (size_t)1 << logsize;
+  fft_complex_t *tmpbuf = malloc(sizeof(fft_complex_t) * process_size);
+  for (size_t i = 0; i < process_size; ++i) {
+    tmpbuf[i].imag = 0;
+    tmpbuf[i].real = data[i * nchannel];
+  }
+  fft_inplace(tmpbuf, logsize);
+
+  /* process here */
+  size_t threshold = 2000;
+  size_t k = threshold * process_size / rate;
+  for (size_t i = k; i < process_size; ++i) {
+    if (complex_mod(tmpbuf[i]) > threshold)
+      tmpbuf[i] = (fft_complex_t) { 0, 0 };
+
+  }
+
+  for (size_t i = 1, j = process_size - 1; i < j; ++i, --j) {
+    fft_complex_t tmp = tmpbuf[i];
+    tmpbuf[i] = tmpbuf[j];
+    tmpbuf[j] = tmp;
+  }
+  fft_inplace(tmpbuf, logsize);
+  for (size_t i = 0; i < process_size; ++i) {
+    tmpbuf[i].real /= process_size;
+    tmpbuf[i].imag /= process_size;
+  }
+  for (size_t i = 0; i < process_size; ++i) {
+    data[i * nchannel] = tmpbuf[i].real;
+  }
+  free(tmpbuf);
+}
+
 static void prepare_data(struct context *context, const char *music) {
   mp3dec_init(&context->mp3dec);
   if (mp3dec_load(&context->mp3dec, music, &context->mp3fileinfo, NULL, NULL)) {
     fprintf(stderr, "failed to load file: %s\n", music);
     exit(EXIT_FAILURE);
   }
+
+  // for (size_t i = 0; i < context->mp3fileinfo.samples; i += context->mp3fileinfo.channels) {
+  //   context->mp3fileinfo.buffer[i + 1] = context->mp3fileinfo.buffer[i];
+  // }
+
+  // for (size_t i = 0; i < context->mp3fileinfo.samples; i += context->mp3fileinfo.channels) {
+  //   size_t divisor = (UINT16_MAX + 1) / 256;
+  //   size_t volume = context->mp3fileinfo.buffer[i] + 32768;
+  //   volume /= divisor;
+  //   volume *= divisor;
+  //   context->mp3fileinfo.buffer[i] = (int)volume - 32768;
+  // }
+
+  // proccess_data(context->mp3fileinfo.buffer,
+  //               context->mp3fileinfo.samples / context->mp3fileinfo.channels,
+  //               context->mp3fileinfo.channels, context->mp3fileinfo.hz);
+
+  // proccess_data(context->mp3fileinfo.buffer + 1,
+  //               context->mp3fileinfo.samples / context->mp3fileinfo.channels,
+  //               context->mp3fileinfo.channels, context->mp3fileinfo.hz);
 
   context->fftbuffers = malloc(sizeof (context->fftbuffers[0]) * context->mp3fileinfo.channels);
   if (!context->fftbuffers) {
