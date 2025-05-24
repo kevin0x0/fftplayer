@@ -24,7 +24,8 @@ size_t audio_getpos(struct audio_desc *desc) {
   return mmtime.u.sample;
 }
 
-void audio_play(struct audio_desc *desc) {
+void audio_play(struct audio_desc *desc, const char *params) {
+  (void)params;
   // 配置音频格式
   WAVEFORMATEX wf;
   wf.wFormatTag = WAVE_FORMAT_PCM;
@@ -69,11 +70,11 @@ void audio_free(struct audio_desc *desc) {
   waveOutClose(desc->hWaveOut);
 }
 #else
-void audio_play(struct audio_desc *desc) {
+void audio_play(struct audio_desc *desc, const char *params) {
   snd_pcm_t *pcm_handle;
   snd_pcm_hw_params_t *hw_params;
 
-  const char *device = "hw";
+  const char *device = params ? params : "default";
   int err = snd_pcm_open(&pcm_handle, device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
   if (err < 0) {
     fprintf(stderr, "error: can not open default device\n");
@@ -86,7 +87,7 @@ void audio_play(struct audio_desc *desc) {
   snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_S16_LE);
   snd_pcm_hw_params_set_channels(pcm_handle, hw_params, desc->nchannel);
   snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, &desc->rate, NULL);
-  snd_pcm_uframes_t period = 16384;
+  snd_pcm_uframes_t period = 4096;
   snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period, 0);
   snd_pcm_hw_params(pcm_handle, hw_params);
 
@@ -95,7 +96,7 @@ void audio_play(struct audio_desc *desc) {
   desc->period_size = period;
 }
 
-static void ensure_good_state(snd_pcm_t *pcm_handle) {
+static snd_pcm_uframes_t available(snd_pcm_t *pcm_handle) {
   snd_pcm_state_t state = snd_pcm_state(pcm_handle);
 
   switch (state) {
@@ -120,31 +121,34 @@ static void ensure_good_state(snd_pcm_t *pcm_handle) {
       exit(EXIT_FAILURE);
     }
   }
+  snd_pcm_sframes_t avail = snd_pcm_avail_update(pcm_handle);
+  if (avail < 0) {
+    fprintf(stderr, "failed to get available number of frames: %s\n",
+            snd_strerror(avail));
+    exit(EXIT_FAILURE);
+  }
+
+  return avail;
 }
 
 void audio_continue(struct audio_desc *desc) {
   snd_pcm_uframes_t nframe = desc->samples / desc->nchannel;
-  if (desc->currpos >= nframe)
+  if (desc->currpos >= nframe || available(desc->pcm_handle) == 0)
     return;
-  ensure_good_state(desc->pcm_handle);
 
   size_t residual_frames = nframe - desc->currpos;
-  snd_pcm_uframes_t writeframes = desc->period_size > residual_frames ? residual_frames : desc->period_size;
-  snd_pcm_sframes_t actual_sframes = snd_pcm_writei(desc->pcm_handle, desc->data + desc->nchannel * desc->currpos, writeframes);
-  if (actual_sframes == -EAGAIN) {
-    return;
-  } else if (actual_sframes == -EPIPE) {
+  size_t writeframes = desc->period_size > residual_frames ? residual_frames : desc->period_size;
+  snd_pcm_sframes_t sframes = snd_pcm_writei(desc->pcm_handle, desc->data + desc->nchannel * desc->currpos, writeframes);
+  if (sframes == -EPIPE) {
     snd_pcm_prepare(desc->pcm_handle);
-    actual_sframes = snd_pcm_writei(desc->pcm_handle, desc->data, desc->period_size);
-    if (actual_sframes < 0) {
-      fprintf(stderr, "writei again error: %s\n", snd_strerror(actual_sframes));
-      exit(EXIT_FAILURE);
-    }
-  } else if (actual_sframes < 0) {
-    fprintf(stderr, "writei error(%d): %s\n", (int)actual_sframes, snd_strerror(actual_sframes));
+    sframes = snd_pcm_writei(desc->pcm_handle, desc->data, desc->period_size);
+  } else if (sframes == -EAGAIN) {
+    return;
+  } else if (sframes < 0) {
+    fprintf(stderr, "error: %s\n", snd_strerror(sframes));
     exit(EXIT_FAILURE);
   }
-  desc->currpos += actual_sframes;
+  desc->currpos += sframes;
 }
 
 void audio_free(struct audio_desc *desc) {

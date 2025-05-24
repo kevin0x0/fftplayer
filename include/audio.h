@@ -20,7 +20,7 @@ struct audio_desc {
 #else
   snd_pcm_t *pcm_handle;
   size_t currpos;
-  size_t period_size;
+  snd_pcm_uframes_t period_size;
 #endif
   mp3d_sample_t *data;
   size_t samples;
@@ -29,7 +29,7 @@ struct audio_desc {
   int avg_bitrate_kbps;
 };
 
-void audio_play(struct audio_desc *desc);
+void audio_play(struct audio_desc *desc, const char *params);
 void audio_free(struct audio_desc *desc);
 size_t audio_getpos(struct audio_desc *desc);
 bool audio_end(struct audio_desc *desc);

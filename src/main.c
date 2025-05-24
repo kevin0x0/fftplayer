@@ -25,7 +25,7 @@
 #define WINDOW_HEIGHT 640
 #define WINDOW_TITLE  "opengl learning"
 
-#define FFT_LOGSIZE   12
+#define FFT_LOGSIZE   10
 #define FFT_SIZE      ((size_t)1 << FFT_LOGSIZE)
 #define FFT_NFREQ     (FFT_SIZE / 2 + 1)
 
@@ -70,7 +70,7 @@ static void context_deinit(struct context *context);
 static void prepare_data(struct context *context, const char *music);
 static void prepare_program(struct context *context, const char *vspath, const char *fspath);
 static void render(struct context *context, size_t currpos);
-static void play_audio(struct context *context);
+static void play_audio(struct context *context, const char *params);
 static void window_resize_callback(GLFWwindow* window, int width, int height);
 
 int main(int argc, char **argv) {
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
   context_init(&context, argv[1], "resources/vs.glsl", "resources/fs.glsl");
 
   glClearColor(0.0, 0.0, 0.0, 1.0);
-  play_audio(&context);
+  play_audio(&context, argc > 2 ? argv[2] : NULL);
 
   size_t audiopos = 0;
   audiopos = audio_getpos(&context.audio);
@@ -309,7 +309,7 @@ static void prepare_program(struct context *context, const char *vspath, const c
   glDeleteShader(fs);
 }
 
-static void play_audio(struct context *context) {
+static void play_audio(struct context *context, const char *params) {
   context->audio = (struct audio_desc) {
     .nchannel = context->mp3fileinfo.channels,
     .samples = context->mp3fileinfo.samples,
@@ -318,7 +318,7 @@ static void play_audio(struct context *context) {
     .avg_bitrate_kbps = context->mp3fileinfo.avg_bitrate_kbps,
   };
 
-  audio_play(&context->audio);
+  audio_play(&context->audio, params);
 }
 
 static void window_resize_callback(GLFWwindow* window, int width, int height) {

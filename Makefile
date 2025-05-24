@@ -9,7 +9,7 @@ include objects.mk
 
 CC = gcc
 DEBUG = -g
-OPTIMIZE =
+OPTIMIZE = -O3
 CFLAGS = -I $(INC_DIR) $(DEBUG) $(OPTIMIZE) -Wall -Wextra
 LIBS = -lm -lglfw
 
